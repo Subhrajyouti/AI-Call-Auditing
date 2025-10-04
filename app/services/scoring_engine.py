@@ -11,7 +11,7 @@ from typing import Dict, Any
 
 # configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
-MODEL_NAME = "gemini-1.5-pro"
+MODEL_NAME = "gemini-2.5-flash"
 model = genai.GenerativeModel(MODEL_NAME)
 
 # Path to the audit parameters Excel (your uploaded file)
@@ -144,60 +144,160 @@ def detect_background_noise(file_path: str, sr=16000, rms_threshold=0.01) -> boo
         return False
 
 # --- 4) Primary scoring function ---
+def summarize_call(transcript: str) -> Dict[str, str]:
+    """
+    Uses Gemini to summarize the call:
+    - what was the issue
+    - what actions agent took
+    - how it was resolved
+    - overall summary
+    Returns a structured dictionary.
+    """
+    summary_prompt = f"""
+You are a call audit summarizer. Read the following customer service call transcript
+and extract these details clearly:
+
+1. Customer Issue or Request (brief)
+2. Actions Taken by Agent
+3. Resolution or Outcome
+4. Overall Summary (neutral, concise 3–4 lines)
+
+Be concise and factual. Return ONLY JSON like:
+{{
+  "customer_issue": "...",
+  "agent_actions": "...",
+  "resolution": "...",
+  "summary": "..."
+}}
+
+Transcript:
+\"\"\"{transcript}\"\"\"
+    """
+
+    try:
+        response = model.generate_content(
+            summary_prompt,
+            generation_config={"temperature": 0.3, "top_p": 0.9}
+        )
+        raw_text = response.text.strip()
+        match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+        json_text = match.group(0) if match else "{}"
+        summary = json.loads(json_text)
+    except Exception as e:
+        print("⚠️ Summary generation failed:", e)
+        summary = {
+            "customer_issue": "Not detected",
+            "agent_actions": "Not detected",
+            "resolution": "Not detected",
+            "summary": "Could not summarize this call."
+        }
+
+    return summary
+
 def score_transcript(transcript: str, file_path: str = None) -> Dict[str, Any]:
     """
-    1) Compose prompt asking Gemini to check each audible param strictly.
-    2) Call Gemini with temperature=0 style settings to produce consistent JSON.
-    3) Parse JSON and compute numeric marks (full weight or 0).
-    4) Add background noise detection (if file_path is provided).
+    Improved version with stronger prompt, example-based instruction,
+    and robust JSON parsing fallback.
     """
-    # build param dict from loaded sheet, restrict to audible allowlist
-    param_weights = {name: w for (name,w) in PARAMS_WITH_WEIGHTS if name in AUDIBLE_ALLOWLIST}
 
-    # Build strict prompt for Gemini
-    prompt = build_strict_prompt(transcript, param_weights)
+    param_weights = {name: w for (name, w) in PARAMS_WITH_WEIGHTS if name in AUDIBLE_ALLOWLIST}
 
-    # Call Gemini model - force deterministic behavior
-    # Use model.generate_content with a text input (string)
-    response = model.generate_content(prompt)
+    # --- STRONGER PROMPT ---
+    param_text = "\n".join([f"- {p} ({w} points)" for p, w in param_weights.items()])
+    prompt = f"""
+You are an experienced QA auditor analyzing a customer service call transcript.
+Your task is to audit the agent's performance strictly based on what is said in the transcript.
+Follow these rules carefully:
+
+- Only give full marks or zero marks (no partial).
+- Return JSON only. Do not include explanations outside JSON.
+- If transcript clearly shows compliance with a rule → mark "pass"
+- If not explicitly clear → mark "fail"
+- Each "evidence" must be an exact phrase from the transcript proving the pass.
+- If no proof, evidence = "No evidence".
+- Default to "fail" if uncertain.
+
+### Example:
+If the parameter is "Greeting & Introduction (5)", and the transcript starts with
+"Good morning, welcome to Happy Foods", then output:
+"status": "pass", "evidence": "Good morning, welcome to Happy Foods"
+
+If the transcript never greets → "status": "fail", "evidence": "No evidence"
+
+Now audit this transcript strictly using only the following parameters and weights:
+{param_text}
+
+Transcript:
+\"\"\"{transcript}\"\"\"
+
+Output format:
+{{
+  "per_parameter": {{
+     "Parameter Name": {{"status": "pass"/"fail", "evidence": "...", "weight": number}},
+     ...
+  }}
+}}
+    """
+
+    # --- CALL GEMINI ---
+    response = model.generate_content(
+        prompt,
+        generation_config={"temperature": 0.1, "top_p": 0.9}
+    )
+
     raw_text = response.text.strip()
 
-    # The model is instructed to return exact JSON. Defensive parsing:
+    # --- JSON RECOVERY ---
+    # Try to extract JSON even if Gemini adds extra text
+    match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+    json_text = match.group(0) if match else "{}"
+
     try:
-        parsed = json.loads(raw_text)
-    except Exception:
-        # If parsing fails, fallback: make a conservative empty fail for all
+        parsed = json.loads(json_text)
+    except Exception as e:
+        print("⚠️ Gemini returned invalid JSON, using fallback:", e)
         parsed = {"per_parameter": {}}
-        for p,w in param_weights.items():
+        for p, w in param_weights.items():
             parsed["per_parameter"][p] = {"status": "fail", "evidence": "No evidence", "weight": w}
 
-    # compute marks
+    # --- SCORE CALCULATION ---
     per_parameter = {}
     total_score = 0
     max_score = 0
-    for p,w in param_weights.items():
+    for p, w in param_weights.items():
         max_score += w
         entry = parsed.get("per_parameter", {}).get(p, {})
-        status = entry.get("status", "fail")
+        status = entry.get("status", "fail").lower()
         evidence = entry.get("evidence", "No evidence")
-        mark = w if str(status).lower() == "pass" else 0
+        mark = w if status == "pass" else 0
         per_parameter[p] = {"weight": w, "mark": mark, "evidence": evidence}
         total_score += mark
 
-    # background noise (special audible parameter)
+    # --- BACKGROUND NOISE DETECTION ---
     if file_path:
         noise_flag = detect_background_noise(file_path)
-        # add as a parameter row (Yes/No)
-        per_parameter["Background Noise"] = {"weight": 0, "mark": 0, "evidence": "Yes" if noise_flag else "No"}
-    # transfer accuracy is hard to validate automatically - skip unless transcript contains word 'transferred' or 'transfer'
-    transfer_evidence = "No evidence"
-    if re.search(r'\btransfer(?:red|ring)?\b', transcript, flags=re.I):
-        transfer_evidence = "Transcript contains 'transfer' evidence"
-        per_parameter["Transfer Accuracy"] = {"weight": 0, "mark": 0, "evidence": transfer_evidence}
+        per_parameter["Background Noise"] = {
+            "weight": 0,
+            "mark": 0,
+            "evidence": "Yes" if noise_flag else "No"
+        }
+
+    # --- TRANSFER EVIDENCE ---
+    if re.search(r'\btransfer(?:red|ring)?\b', transcript, re.I):
+        per_parameter["Transfer Accuracy"] = {
+            "weight": 0,
+            "mark": 0,
+            "evidence": "Transfer word found in transcript"
+        }
+
+    call_summary = summarize_call(transcript)
 
     return {
         "per_parameter": per_parameter,
         "total_score": total_score,
         "max_score": max_score,
+        "summary": call_summary,
         "raw_model_output": raw_text
     }
+
+

@@ -44,6 +44,7 @@ def run_audit(req: AuditRequest):
     return {
         "filename": req.filename,
         "transcript_snippet": transcript[:1000],
+        "summary": results.get("summary", {}),
         "scoring": results,
         "csv_path": out_csv
     }

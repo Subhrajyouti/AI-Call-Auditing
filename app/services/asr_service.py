@@ -8,7 +8,7 @@ def transcribe_audio(file_path: str):
     """
     Transcribes audio using Gemini 1.5 Pro model.
     """
-    model = genai.GenerativeModel("gemini-1.5-pro")
+    model = genai.GenerativeModel("gemini-2.5-flash")
 
     # Read the audio file as binary
     with open(file_path, "rb") as audio_file:

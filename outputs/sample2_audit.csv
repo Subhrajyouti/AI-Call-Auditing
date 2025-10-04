@@ -1,0 +1,19 @@
+parameter,weight,mark_obtained,evidence
+Call Greeting & Introduction,5,5,"Good morning, welcome to Happy Foods. My name is Beam. How may I help you?"
+Call Control & Professionalism,5,5,"Okay, I'm really sorry for the inconvenience, sir. I'll definitely help you out regarding your concern, sir. So first of all, may I know, sir, are you calling with your registered mobile number?"
+Customer Needs Analysis,5,5,"So, your concern is that you're unable to do the web check-in, right, sir?"
+Product Knowledge & Solution Offering,5,5,"Yes, you have to, you have to do the web check-in on the SpiceJet website by entering your airline PNR and your last name, sir. But let me inform you, as, as I can check your details, your names are not yet reflecting on the airline website. So, you have to do the web check-in today after 9:00 PM, sir. Evening."
+Booking Process,5,0,No evidence
+Handling Customer Objections/Queries,5,5,"Sure, you will get the option of you, you will get the option to do the web check-in, sir. There won't be any issue, sir."
+Call Closure,5,5,"Thank you for choosing Happy Fares. Have a great day ahead, sir."
+Active Listening & Empathy,5,5,"Okay, I'm really sorry for the inconvenience, sir. I'll definitely help you out regarding your concern, sir."
+Tone & Rapport Building,5,5,"Thank you so much, sir. Once you verify your email ID and the passenger's name."
+Hold Etiquette,5,0,No evidence
+Upselling Attempted,5,0,No evidence
+Problem-Solving & Resolution,10,10,"But let me inform you, as, as I can check your details, your names are not yet reflecting on the airline website. So, you have to do the web check-in today after 9:00 PM, sir. Evening. ... Sure, you will get the option of you, you will get the option to do the web check-in, sir. There won't be any issue, sir."
+Communication Skills,10,10,"Yes, you have to, you have to do the web check-in on the SpiceJet website by entering your airline PNR and your last name, sir. But let me inform you, as, as I can check your details, your names are not yet reflecting on the airline website. So, you have to do the web check-in today after 9:00 PM, sir. Evening."
+Compliance & Data Security,10,10,"So first of all, may I know, sir, are you calling with your registered mobile number? ... Thank you so much, sir. Once you verify your email ID and the passenger's name. ... So, as I can check your details, your airline partner is SpiceJet. New Delhi to Pune, travel date is on 7th of August 2025. Departure time is on 9:20 AM morning, right, sir?"
+Background Noise,0,0,Yes
+
+total_score,70
+max_score,85
