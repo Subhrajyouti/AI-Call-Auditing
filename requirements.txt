@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+python-multipart
+google-generativeai
+langchain
+langchain-google-genai
+pydantic
+requests
+pinecone-client
+faiss-cpu
+numpy
+pandas
+pyannote.audio
+torch
+librosa
+soundfile
+scikit-learn
